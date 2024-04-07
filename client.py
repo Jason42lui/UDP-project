@@ -1,7 +1,7 @@
 """
 Created on Sat Feb 24
-@author: Set
-Student Number: A01308077
+@author: Set & Jason
+Student Number: A01308077 & A10307299
 
 The purpose of this client script is to read a text file specified by the user and send its contents over a UDP
 connection to a server for analysis. It calculates the number of packets needed to transmit the file's data based on

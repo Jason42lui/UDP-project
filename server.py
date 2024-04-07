@@ -1,7 +1,7 @@
 """
 Created on Sat Feb 24
-@author: Set
-Student Number: A01308077
+@author: Set & Jason
+Student Number: A01308077 & A10307299
 
 The purpose of this server is to provide character count, word count, and character frequency analysis for the text
 data it receives over UDP (User Datagram Protocol). It listens for incoming data packets, aggregates them,
