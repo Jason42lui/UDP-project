@@ -18,6 +18,9 @@ packet_size = False
 global server_socket
 UDP_IP = "127.0.0.1"
 UDP_PORT = 5005
+SYN = "SYN"
+ACK = "ACK"
+SYN_ACK = "SYN-ACK"
 
 
 def get_character_count(text):
@@ -100,6 +103,50 @@ def process_data(packets):
     except UnicodeDecodeError:
         print("Data is not valid UTF-8, handle as binary or other encoding")
 
+def send_syn_ack(client_socket, address):
+    """
+    Send a SYN-ACK response to the client.
+
+    Parameters:
+    - client_socket (socket): The client socket.
+    - address (str): The client address.
+    """
+    client_socket.sendto(SYN_ACK.encode(), address)
+    print("Sent SYN-ACK to Client")
+
+def receive_syn(client_socket):
+    """
+    Receive a SYN request from the client.
+
+    Parameters:
+    - client_socket (socket): The client socket.
+    """
+    syn, addr = client_socket.recvfrom(1024)
+    if syn.decode() == SYN:
+        print("Received SYN from Client")
+        return True, addr
+    else:
+        print("Failed: Received SYN response from Client")
+        return False, None
+    
+def receive_final_ack(client_socket):
+    """
+    Receive a final ACK response from the client.
+
+    Parameters:
+    - client_socket (socket): The client socket.
+    """
+    try:
+        final_ack, addr = client_socket.recvfrom(1024)
+        if final_ack.decode() == ACK:
+            print("Received final ACK from Client")
+            return True
+        else:
+            print("Failed: Received invalid response from Client")
+            return False
+    except Exception as e:
+        print(f"Failed: Error receiving final ACK - {e}")
+        return False
 
 def main():
     """
@@ -109,37 +156,58 @@ def main():
     and listens for incoming data packets. It processes the received data and sends
     the analysis results back to the client.
     """
-    global server_socket
     global running
-    global packet_size
-    packets = []
+    running = True
+
     ip_version = socket.AF_INET if ':' not in UDP_IP else socket.AF_INET6
     server_socket = socket.socket(ip_version, socket.SOCK_DGRAM)
     server_socket.bind((UDP_IP, UDP_PORT))
     signal.signal(signal.SIGINT, signal_handler)
+
     while running:
         try:
-            if packet_size is False:
-                print('Waiting for packet count')
-                packet_count, address = server_socket.recvfrom(1024)
-                packet_count = int(packet_count.decode())
-                print('Received packet count:', packet_count)
-                packet_size = True
-                time.sleep(0.0001)
-            data, addr = server_socket.recvfrom(1024)
-            if data == b'END':
-                print('Received all packets, processing content analysis')
-                results = process_data(packets)
-                print(results)
-                server_socket.sendto(results.encode(), addr)
-                packets = []
-                packet_size = False
-                continue
-            packets.append(data)
+            print("Server is listening for incoming connections...")
+            syn_received, client_addr = receive_syn(server_socket)
+            if syn_received:
+                send_syn_ack(server_socket, client_addr)
+                if receive_final_ack(server_socket):
+                    print(f"Connection established with client {client_addr}")
+
+                    packets = []
+                    expected_packet_count = True
+
+                    while expected_packet_count:
+                        try:
+                            if packets:
+                                print('Received all packets, processing content analysis')
+                                results = process_data(packets)
+                                print(results)
+                                server_socket.sendto(results.encode(), client_addr)
+                                packets = []
+                            else:
+                                print('Waiting for packet count or END from client')
+                                packet_count_data, _ = server_socket.recvfrom(1024)
+                                packet_count = packet_count_data.decode()
+                                if packet_count == 'END':
+                                    print('Received END from client')
+                                    expected_packet_count = False
+                                else:
+                                    packet_count = int(packet_count)
+                                    print('Received packet count:', packet_count)
+                                    for _ in range(packet_count):
+                                        data, _ = server_socket.recvfrom(1024)
+                                        packets.append(data)
+                        except socket.error as e:
+                            print(e)
+                            running = False
+                    print("Connection with client ended.")
+                else:
+                    print("Failed: Did not receive final ACK from client")
+            else:
+                print("Failed: Did not receive SYN from client")
         except socket.error as e:
             print(e)
             running = False
-
 
 if __name__ == '__main__':
     main()
