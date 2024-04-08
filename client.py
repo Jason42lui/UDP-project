@@ -16,6 +16,7 @@ import time
 SYN = "SYN"
 ACK = "ACK"
 SYN_ACK = "SYN-ACK"
+FIN = "FIN"
 
 def handle_file(filename):
     """
@@ -84,6 +85,33 @@ def send_final_ack(server_socket, udp_ip, udp_port):
     server_socket.sendto(ACK.encode(), (udp_ip, udp_port))
     print("Sent final ACK")
 
+def send_fin(server_socket, udp_ip, udp_port):
+    server_socket.sendto(FIN.encode(), (udp_ip, udp_port))
+    print("Sent FIN")
+
+def receive_fin_ack(server_socket):
+    fin_ack, addr = server_socket.recvfrom(1024)
+    print(fin_ack.decode())
+    if fin_ack.decode() == ACK:
+        print("Received ACK for FIN from server")
+        return True
+    else:
+        print("Failed: Received invalid ACK for FIN from server")
+        return False
+
+def receive_fin(server_socket):
+    fin, addr = server_socket.recvfrom(1024)
+    if fin.decode() == FIN:
+        print("Received FIN from server")
+        return True
+    else:
+        print("Failed: Received invalid FIN from server")
+        return False
+
+def send_final_ack(server_socket, udp_ip, udp_port):
+    server_socket.sendto(ACK.encode(), (udp_ip, udp_port))
+    print("Sent final ACK")
+
 def main():
     buffer_size = 512
     if len(sys.argv) != 4:
@@ -110,7 +138,6 @@ def main():
         if client_socket is not None:
             send_syn(client_socket, udp_ip, udp_port)
             if receive_syn_ack(client_socket):
-                print("Received SYN-ACK from server")
                 # Send ACK to complete the three-way handshake
                 client_socket.sendto(ACK.encode(), (udp_ip, udp_port))
                 print("Sent ACK to server")
@@ -121,12 +148,27 @@ def main():
                 for i in range(0, packet_count):
                     client_socket.sendto(file_descriptor.read(buffer_size).encode(), (udp_ip, udp_port))
                     time.sleep(0.0001)
-                client_socket.sendto(b'END', (udp_ip, udp_port))
-                print("Sent all %d packets\n" % packet_count)
-                results, addr = client_socket.recvfrom(1024)
-                print(results.decode())
-                file_descriptor.close()
-                client_socket.close()
+                # 4-way handshake
+                send_fin(client_socket, udp_ip, udp_port)
+                if receive_fin_ack(client_socket):
+                    print("Received ACK for FIN from server")
+                    time.sleep(0.0001)
+                    if receive_fin(client_socket):
+                        print("Received FIN from server")
+                        time.sleep(0.0001)
+                        send_final_ack(client_socket, udp_ip, udp_port)
+                        print("Sent final ACK to server")
+                        time.sleep(0.0001)
+                        results, addr = client_socket.recvfrom(1024)
+                        print(results.decode())
+                        file_descriptor.close()
+                        client_socket.close()
+                    else:
+                        print("Failed to receive FIN from server. Closing connection.")
+                        client_socket.close()
+                else:
+                    print("Failed to receive ACK for FIN from server. Closing connection.")
+                    client_socket.close()
             else:
                 print("Handshake failed. Closing connection.")
                 client_socket.close()

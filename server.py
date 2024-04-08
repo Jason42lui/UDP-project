@@ -21,6 +21,8 @@ UDP_PORT = 5005
 SYN = "SYN"
 ACK = "ACK"
 SYN_ACK = "SYN-ACK"
+FIN = "FIN"
+FIN_ACK = "FIN-ACK"
 
 
 def get_character_count(text):
@@ -185,12 +187,24 @@ def main():
                                 server_socket.sendto(results.encode(), client_addr)
                                 packets = []
                             else:
-                                print('Waiting for packet count or END from client')
+                                print('Waiting for packet count or FIN from client')
                                 packet_count_data, _ = server_socket.recvfrom(1024)
                                 packet_count = packet_count_data.decode()
-                                if packet_count == 'END':
-                                    print('Received END from client')
-                                    expected_packet_count = False
+                                # 4-way handshake
+                                if packet_count == 'FIN':
+                                    print('Received FIN from client')
+                                    server_socket.sendto(ACK.encode(), client_addr)
+                                    print('Sent ACK for FIN to client')
+                                    server_socket.sendto(FIN.encode(), client_addr)
+                                    print(FIN.encode())
+                                    print(client_addr)
+                                    print('Sent own FIN to client')
+                                    final_ack_data, _ = server_socket.recvfrom(1024)
+                                    if final_ack_data.decode() == ACK:
+                                        print('Received final ACK from client')
+                                        expected_packet_count = False
+                                    else:
+                                        print('Failed: Did not receive final ACK from client after sending FIN')
                                 else:
                                     packet_count = int(packet_count)
                                     print('Received packet count:', packet_count)
@@ -208,6 +222,7 @@ def main():
         except socket.error as e:
             print(e)
             running = False
+
 
 if __name__ == '__main__':
     main()
